@@ -1,7 +1,5 @@
 # SmartDNS Admin 开发环境指南
 
-本页部分环境要求和端口来自旧版。维护当前 fork 时，先读 [维护指南](docs/maintenance.md)，以 `go.mod`、`ui/package-lock.json` 及实际配置为准。
-
 ## 快速启动
 
 我们提供了多种方式来启动开发环境，选择适合你的操作系统和偏好的方式：
