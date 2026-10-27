@@ -1,5 +1,7 @@
 # SmartDNS Manager
 
+维护此 fork 前请阅读 [项目维护指南](docs/maintenance.md)，其中记录代码位置、配置生效流程、提交合并要求和部署回退方式。开发代理入口为 [AGENTS.md](AGENTS.md)。
+
 <div align="center">
 
 [![Author](https://img.shields.io/badge/Author-yantao-blue.svg?style=flat-square)](https://github.com/almightyyantao)

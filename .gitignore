@@ -84,3 +84,6 @@ deploy/certs/
 *.backup
 *.bak
 backups/
+
+# 本机维护信息：生产地址、认证入口、版本快照和回退位置
+docs/maintenance.local.md
