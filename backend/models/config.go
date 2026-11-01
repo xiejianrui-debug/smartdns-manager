@@ -7,6 +7,7 @@ import (
 )
 
 type SmartDNSConfig struct {
+	SourceContent string            `json:"source_content,omitempty"`
 	Servers       []DNSServer       `json:"servers"`
 	Addresses     []AddressMap      `json:"addresses"`
 	DomainSets    []DomainSet       `json:"domain_sets"`
@@ -20,6 +21,11 @@ type DNSServer struct {
 	ID             uint      `json:"id" gorm:"primarykey"`
 	Address        string    `json:"address" gorm:"not null"`
 	Type           string    `json:"type"` // udp, tcp, tls, https
+	Directive      string    `json:"directive"`
+	HostIP         string    `json:"host_ip"`
+	TLSHostVerify  string    `json:"tls_host_verify"`
+	ExtraOptions   string    `json:"extra_options"`
+	OptionsVersion int       `json:"options_version"`
 	Groups         []string  `json:"groups" gorm:"-"`
 	GroupsStr      string    `json:"-" gorm:"column:groups"` // 存储 JSON
 	ExcludeDefault bool      `json:"exclude_default"`

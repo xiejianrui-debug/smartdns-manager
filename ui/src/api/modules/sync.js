@@ -1,6 +1,7 @@
 import request from "../../utils/request";
 
-export const triggerFullSync = (id) => request.post(`/sync/node/${id}/full`);
+export const triggerFullSync = (id, data = {}) => request.post(`/sync/node/${id}/full`, data);
+export const previewNodeSync = (id) => request.get(`/sync/node/${id}/preview`);
 export const batchFullSync = (data) => request.post("/sync/batch", data);
 export const getSyncLogs = (params) => request.get("/sync/logs", { params });
 export const getSyncStats = () => request.get("/sync/stats");

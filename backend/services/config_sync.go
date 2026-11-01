@@ -1,6 +1,7 @@
 package services
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -236,7 +237,7 @@ func (s *ConfigSyncService) syncServerToNode(server *models.DNSServer, node *mod
 	serverExists := false
 	for i, srv := range config.Servers {
 		if srv.Address == server.Address {
-			config.Servers[i] = *server
+			config.Servers[i] = MergeServerForSync(srv, *server)
 			serverExists = true
 			break
 		}
@@ -319,6 +320,10 @@ func (s *ConfigSyncService) deleteAddressFromNode(address *models.AddressMap, no
 }
 
 func (s *ConfigSyncService) FullSyncToNode(nodeID uint) error {
+	return s.FullSyncToNodeWithChecksum(nodeID, "")
+}
+
+func (s *ConfigSyncService) FullSyncToNodeWithChecksum(nodeID uint, checksum string) error {
 	var node models.Node
 	if err := database.DB.First(&node, nodeID).Error; err != nil {
 		return err
@@ -337,25 +342,17 @@ func (s *ConfigSyncService) FullSyncToNode(nodeID uint) error {
 	if err != nil {
 		return err
 	}
+	if checksum != "" && checksum != fmt.Sprintf("%x", sha256.Sum256([]byte(currentConfig))) {
+		return fmt.Errorf("节点配置已变化，请重新预览")
+	}
 
-	// 解析现有配置
-	parser := NewConfigParser()
-	config, err := parser.Parse(currentConfig)
+	newConfig, err := s.PlanFullSync(currentConfig, nodeID)
 	if err != nil {
 		return err
 	}
-
-	// 获取数据库中的配置
-	var dbAddresses []models.AddressMap
-	database.DB.Where("enabled = ?", true).Find(&dbAddresses)
-	targetAddresses := s.filterConfigForNode(dbAddresses, nodeID)
-
-	var dbServers []models.DNSServer
-	database.DB.Where("enabled = ?", true).Find(&dbServers)
-	targetServers := s.filterServersForNode(dbServers, nodeID)
-
-	// 合并配置：保留现有的，添加数据库中的
-	config = s.mergeConfigs(config, targetServers, targetAddresses)
+	if losses := ConfigLosses(currentConfig, newConfig); len(losses) > 0 {
+		return fmt.Errorf("同步已阻止，可能丢失 %d 项配置，请先查看同步预览", len(losses))
+	}
 
 	// 创建备份
 	backupPath, err := client.CreateBackup(node.ConfigPath)
@@ -364,9 +361,6 @@ func (s *ConfigSyncService) FullSyncToNode(nodeID uint) error {
 	} else {
 		log.Printf("配置已备份到: %s", backupPath)
 	}
-
-	// 生成新配置
-	newConfig := parser.Generate(config)
 
 	// 写入配置
 	err = client.WriteFile(node.ConfigPath, newConfig)
@@ -378,6 +372,25 @@ func (s *ConfigSyncService) FullSyncToNode(nodeID uint) error {
 	return nil
 }
 
+// PlanFullSync 只生成计划，不写入或重启节点。
+func (s *ConfigSyncService) PlanFullSync(currentConfig string, nodeID uint) (string, error) {
+	parser := NewConfigParser()
+	config, err := parser.Parse(currentConfig)
+	if err != nil {
+		return "", err
+	}
+	var dbAddresses []models.AddressMap
+	if err := database.DB.Where("enabled = ?", true).Find(&dbAddresses).Error; err != nil {
+		return "", err
+	}
+	var dbServers []models.DNSServer
+	if err := database.DB.Where("enabled = ?", true).Find(&dbServers).Error; err != nil {
+		return "", err
+	}
+	config = s.mergeConfigs(config, s.filterServersForNode(dbServers, nodeID), s.filterConfigForNode(dbAddresses, nodeID))
+	return parser.Generate(config), nil
+}
+
 // 合并配置的辅助方法
 func (s *ConfigSyncService) mergeConfigs(existingConfig *models.SmartDNSConfig, dbServers []models.DNSServer, dbAddresses []models.AddressMap) *models.SmartDNSConfig {
 	// 合并服务器配置
@@ -387,7 +400,7 @@ func (s *ConfigSyncService) mergeConfigs(existingConfig *models.SmartDNSConfig, 
 		for i, existing := range existingConfig.Servers {
 			if existing.Address == dbServer.Address {
 				// 更新现有的
-				existingConfig.Servers[i] = dbServer
+				existingConfig.Servers[i] = MergeServerForSync(existing, dbServer)
 				found = true
 				break
 			}

@@ -28,17 +28,20 @@ func TriggerFullSync(c *gin.Context) {
 		return
 	}
 
-	// 异步执行完整同步
-	go func() {
-		if err := configSyncService.FullSyncToNode(uint(nodeID)); err != nil {
-			log.Printf("完整同步失败: %v", err)
+	var request struct {
+		Checksum string `json:"checksum"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请求参数错误"})
+			return
 		}
-	}()
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "已开始完整同步，请稍后查看同步日志",
-	})
+	}
+	if err := configSyncService.FullSyncToNodeWithChecksum(uint(nodeID), request.Checksum); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "完整同步完成，未发现配置丢失"})
 }
 
 // BatchFullSync 批量完整同步

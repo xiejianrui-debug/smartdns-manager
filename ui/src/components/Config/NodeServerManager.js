@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Input, Modal, Space, Table, Tag, Typography } from 'antd';
 import { SyncOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import { getNodeConfig, getServers } from '../../api';
+import { getNodeConfig, getServers, previewNodeSync } from '../../api';
 import { getPendingNodeServers, parseNodeServers } from './nodeServers';
 
 const columns = [
@@ -39,6 +39,14 @@ export default function NodeServerManager({ nodeId, active, onEditConfig }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  const showPreview = async () => {
+    setPreviewing(true);
+    try { const result = await previewNodeSync(nodeId); setPreview(result.data); }
+    catch { setError('无法生成同步预览，请重试'); }
+    finally { setPreviewing(false); }
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -72,6 +80,7 @@ export default function NodeServerManager({ nodeId, active, onEditConfig }) {
           重新读取节点配置
         </Button>
         <Button onClick={onEditConfig}>编辑节点配置</Button>
+        <Button loading={previewing} onClick={showPreview}>预览完整同步</Button>
         <Link to="/servers">全局 DNS 管理</Link>
         {!loading && !error && <Typography.Text type="secondary">
           已写入配置：{snapshot.applied.length} 个上游
@@ -89,6 +98,14 @@ export default function NodeServerManager({ nodeId, active, onEditConfig }) {
             scroll={{ x: 1060 }} pagination={false} />
         </>}
       </>}
+      <Modal title="完整同步预览" open={!!preview} onCancel={() => setPreview(null)} footer={null} width={960}>
+        {preview && <Space direction="vertical" style={{ width: '100%' }}>
+          <Alert showIcon type={preview.safe ? 'success' : 'error'}
+            message={preview.safe ? (preview.changed ? '未发现有效指令丢失，以下为待写入配置' : '配置无变化') : `检测到 ${preview.losses?.length || 0} 项丢失，完整同步将被阻止`} />
+          {!preview.safe && <pre style={{ whiteSpace: 'pre-wrap' }}>{preview.losses?.join('\n')}</pre>}
+          <Input.TextArea readOnly value={preview.after} autoSize={{ minRows: 12, maxRows: 24 }} aria-label="同步后配置" />
+        </Space>}
+      </Modal>
     </Space>
   );
 }

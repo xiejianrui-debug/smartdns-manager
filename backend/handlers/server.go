@@ -11,6 +11,7 @@ import (
 
 	"smartdns-manager/database"
 	"smartdns-manager/models"
+	"smartdns-manager/services"
 )
 
 // AddServer 添加DNS服务器
@@ -34,29 +35,18 @@ func AddServer(c *gin.Context) {
 		return
 	}
 
-	// 确定服务器类型
+	services.HydrateServerOptions(&server)
 	if server.Type == "" {
-		if strings.HasPrefix(server.Address, "https://") {
-			server.Type = "https"
-		} else if strings.HasPrefix(server.Address, "tls://") {
-			server.Type = "tls"
-		} else if strings.Contains(server.Address, ":") && !strings.Contains(server.Address, "://") {
-			server.Type = "tcp"
-		} else {
-			server.Type = "udp"
-		}
+		server.Type = services.ServerType(server.Directive, server.Address)
 	}
-
-	// 序列化 Groups
-	if len(server.Groups) > 0 {
-		groupsJSON, _ := json.Marshal(server.Groups)
-		server.GroupsStr = string(groupsJSON)
+	server.OptionsVersion = 1
+	server.Options = services.BuildServerOptions(server)
+	if err := services.ValidateServer(server); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
 	}
-
-	// 生成 Options 字符串
-	if server.Options == "" {
-		server.Options = generateServerOptions(&server)
-	}
+	groupsJSON, _ := json.Marshal(server.Groups)
+	server.GroupsStr = string(groupsJSON)
 
 	// 检查是否已存在
 	var existing models.DNSServer
@@ -112,32 +102,57 @@ func UpdateServer(c *gin.Context) {
 		return
 	}
 
-	var updateData models.DNSServer
-	if err := c.ShouldBindJSON(&updateData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "请求参数错误",
-			"error":   err.Error(),
-		})
+	if server.GroupsStr != "" {
+		_ = json.Unmarshal([]byte(server.GroupsStr), &server.Groups)
+	}
+	services.HydrateServerOptions(&server)
+	var fields map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&fields); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请求参数错误"})
 		return
 	}
-
-	// 更新字段
-	if updateData.Address != "" {
-		server.Address = updateData.Address
+	// 兼容历史 Options 输入；随后显式字段具有更高优先级。
+	if raw, ok := fields["options"]; ok {
+		var options string
+		if err := json.Unmarshal(raw, &options); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "附加参数格式错误"})
+			return
+		}
+		parsed := models.DNSServer{Options: options}
+		services.HydrateServerOptions(&parsed)
+		server.HostIP, server.TLSHostVerify, server.ExtraOptions = parsed.HostIP, parsed.TLSHostVerify, parsed.ExtraOptions
+		if _, exists := fields["groups"]; !exists {
+			server.Groups = parsed.Groups
+		}
+		if _, exists := fields["exclude_default"]; !exists {
+			server.ExcludeDefault = parsed.ExcludeDefault
+		}
 	}
-	if updateData.Type != "" {
-		server.Type = updateData.Type
+	allowed := map[string]json.RawMessage{}
+	for _, key := range []string{"address", "type", "directive", "groups", "exclude_default", "host_ip", "tls_host_verify", "extra_options", "node_ids", "enabled"} {
+		if value, ok := fields[key]; ok {
+			allowed[key] = value
+		}
 	}
-	if len(updateData.Groups) > 0 {
-		server.Groups = updateData.Groups
-		groupsJSON, _ := json.Marshal(server.Groups)
-		server.GroupsStr = string(groupsJSON)
+	encoded, _ := json.Marshal(allowed)
+	oldType := server.Type
+	if err := json.Unmarshal(encoded, &server); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "上游字段格式错误"})
+		return
 	}
-	server.ExcludeDefault = updateData.ExcludeDefault
-
-	// 重新生成 Options
-	server.Options = generateServerOptions(&server)
+	if server.Type != oldType {
+		if _, explicit := fields["directive"]; !explicit {
+			server.Directive = ""
+		}
+	}
+	server.OptionsVersion = 1
+	server.Options = services.BuildServerOptions(server)
+	if err := services.ValidateServer(server); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	groupsJSON, _ := json.Marshal(server.Groups)
+	server.GroupsStr = string(groupsJSON)
 
 	if err := database.DB.Save(&server).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -223,11 +238,12 @@ func GetServers(c *gin.Context) {
 		return
 	}
 
-	// 反序列化 Groups
+	// 反序列化分组并读取历史高级参数。
 	for i := range servers {
 		if servers[i].GroupsStr != "" {
 			json.Unmarshal([]byte(servers[i].GroupsStr), &servers[i].Groups)
 		}
+		services.HydrateServerOptions(&servers[i])
 	}
 
 	c.JSON(http.StatusOK, gin.H{

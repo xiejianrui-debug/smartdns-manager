@@ -140,6 +140,7 @@ func main() {
 
 		// ========== 配置同步 ==========
 		protected.POST("/sync/node/:id/full", handlers.TriggerFullSync) // 完整同步单个节点
+		protected.GET("/sync/node/:id/preview", handlers.PreviewNodeSync)
 		protected.POST("/sync/batch", handlers.BatchFullSync)           // 批量完整同步
 		protected.GET("/sync/logs", handlers.GetSyncLogs)               // 获取同步日志
 		protected.GET("/sync/stats", handlers.GetSyncStats)             // 同步统计

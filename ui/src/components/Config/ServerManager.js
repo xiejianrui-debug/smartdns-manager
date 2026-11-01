@@ -24,14 +24,17 @@ import {
   updateServer,
   deleteServer,
   getGroups,
+  getNodes,
 } from "../../api";
 import dayjs from "dayjs";
+import { nodeScope, serverFormValues, serverPayload } from "./serverForm";
 
 const { Option } = Select;
 
 const ServerManager = () => {
   const [servers, setServers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState(null);
@@ -40,6 +43,7 @@ const ServerManager = () => {
   useEffect(() => {
     loadServers();
     loadGroups();
+    getNodes().then((res) => setNodes((res.data || []).map(({ id, name, host }) => ({ id, name, host })))).catch(() => message.error("加载节点作用域失败"));
   }, []);
 
   const loadGroups = async () => {
@@ -66,15 +70,18 @@ const ServerManager = () => {
   const handleAdd = () => {
     setEditingServer(null);
     form.resetFields();
+    form.setFieldsValue({ type: "udp", groups: [], node_ids: [], exclude_default: false, host_ip: "", tls_host_verify: "", extra_options: "" });
     setModalVisible(true);
   };
 
   const handleEdit = (record) => {
+    try {
+      form.setFieldsValue(serverFormValues(record));
+    } catch (error) {
+      message.error("该记录的节点作用域无效，请先核对配置");
+      return;
+    }
     setEditingServer(record);
-    form.setFieldsValue({
-      ...record,
-      groups: record.groups || [],
-    });
     setModalVisible(true);
   };
 
@@ -90,7 +97,7 @@ const ServerManager = () => {
 
   const handleSubmit = async () => {
     try {
-      const values = await form.validateFields();
+      const values = serverPayload(await form.validateFields());
 
       if (editingServer) {
         await updateServer(editingServer.id, values);
@@ -117,7 +124,6 @@ const ServerManager = () => {
     return colors[type] || "default";
   };
 
-  const commonGroups = ["cn", "oversea", "local", "ad", "bootstrap"];
 
   const columns = [
     {
@@ -162,6 +168,17 @@ const ServerManager = () => {
           {exclude ? "是" : "否"}
         </Tag>
       ),
+    },
+    {
+      title: "生效节点", key: "scope", width: 210,
+      render: (_, row) => {
+        try { const ids = nodeScope(row.node_ids); return ids.length ? ids.map((id) => nodes.find((n) => n.id === id)?.name || `节点 ${id}`).join("、") : "所有节点"; }
+        catch { return <Tag color="error">作用域无效</Tag>; }
+      },
+    },
+    {
+      title: "连接与证书", key: "advanced", width: 250,
+      render: (_, row) => <div><div>IP：{row.host_ip || "自动解析"}</div><div>校验：{row.tls_host_verify || "随上游地址"}</div></div>,
     },
     {
       title: "创建时间",
@@ -225,7 +242,7 @@ const ServerManager = () => {
         dataSource={servers}
         rowKey="id"
         loading={loading}
-        scroll={{ x: 1200 }}
+        scroll={{ x: 1750 }}
         pagination={{
           pageSize: 20,
           showSizeChanger: true,
@@ -238,7 +255,7 @@ const ServerManager = () => {
         open={modalVisible}
         onOk={handleSubmit}
         onCancel={() => setModalVisible(false)}
-        width={600}
+        width={720}
         okText="确定"
         cancelText="取消"
       >
@@ -268,7 +285,7 @@ const ServerManager = () => {
           <Form.Item
             name="groups"
             label="服务器分组"
-            extra="选择或输入自定义分组"
+            extra="留空时仅参与默认组；也可以选择或输入自定义分组"
             rules={[{ required: true, message: "请选择服务器分组" }]}
           >
             <Select
@@ -289,9 +306,21 @@ const ServerManager = () => {
             name="exclude_default"
             label="排除默认组"
             valuePropName="checked"
-            extra="是否排除该服务器在默认组之外"
+            extra="开启后仅供指定分组使用"
           >
             <Switch />
+          </Form.Item>
+          <Form.Item name="host_ip" label="固定连接 IP" extra="可选。直接连接此 IP，保留上游 URL 的域名。">
+            <Input placeholder="例如：8.8.8.8 或 1.1.1.1" allowClear />
+          </Form.Item>
+          <Form.Item name="tls_host_verify" label="TLS 证书校验域名" extra="可选。明确要求证书匹配的域名，主要用于 DoH/DoT。">
+            <Input placeholder="例如：dns.google" allowClear />
+          </Form.Item>
+          <Form.Item name="extra_options" label="其他高级参数" extra="保留未单独列出的 SmartDNS 参数，例如 -http-host。">
+            <Input placeholder="可选，仅填写额外参数" />
+          </Form.Item>
+          <Form.Item name="node_ids" label="生效节点" extra="留空应用所有节点；指定节点后只向这些节点同步。">
+            <Select mode="multiple" allowClear placeholder="所有节点" options={nodes.map((n) => ({value:n.id,label:`${n.name} (${n.host})`}))} />
           </Form.Item>
         </Form>
       </Modal>

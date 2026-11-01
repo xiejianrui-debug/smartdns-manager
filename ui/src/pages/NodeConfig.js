@@ -57,12 +57,15 @@ const NodeConfig = () => {
     }
   };
 
+  const [checksum, setChecksum] = useState('');
+
   const loadConfig = async () => {
     try {
       setLoading(true);
       const response = await getNodeConfig(id);
       setConfig(response.data);
       setRawContent(response.rawContent);
+      setChecksum(response.checksum);
     } catch (error) {
       message.error('加载配置失败');
     } finally {
@@ -89,10 +92,12 @@ const NodeConfig = () => {
       onOk: async () => {
         try {
           setSaving(true);
-          await saveNodeConfig(id, {
+          const saved = await saveNodeConfig(id, {
             config,
             raw_content: rawContent,
+            checksum,
           });
+          setChecksum(saved.checksum);
           message.success('配置保存成功');
           loadBackups();
         } catch (error) {

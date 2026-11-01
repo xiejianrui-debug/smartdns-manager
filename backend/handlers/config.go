@@ -102,6 +102,7 @@ func SaveNodeConfig(c *gin.Context) {
 	var request struct {
 		Config     *models.SmartDNSConfig `json:"config"`
 		RawContent string                 `json:"raw_content"`
+		Checksum   string                 `json:"checksum"`
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -124,6 +125,32 @@ func SaveNodeConfig(c *gin.Context) {
 		return
 	}
 	defer client.Close()
+
+	current, err := client.ReadFile(node.ConfigPath)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": "读取当前配置失败"})
+		return
+	}
+	if request.RawContent != "" && request.Checksum == "" {
+		c.JSON(http.StatusPreconditionRequired, gin.H{"success": false, "message": "请刷新控制台并重新加载配置后再保存"})
+		return
+	}
+	if request.Checksum != "" && request.Checksum != fmt.Sprintf("%x", md5.Sum([]byte(current))) {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "节点配置已变化，请重新加载后合并修改"})
+		return
+	}
+	if request.RawContent == "" {
+		if request.Config == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "配置不能为空"})
+			return
+		}
+		request.Config.SourceContent = current
+		candidate := services.NewConfigParser().Generate(request.Config)
+		if losses := services.ConfigLosses(current, candidate); len(losses) > 0 {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": "结构化保存可能丢失配置，已阻止", "losses": losses})
+			return
+		}
+	}
 
 	// 创建备份
 	backupPath, err := client.CreateBackup(node.ConfigPath)
@@ -337,8 +364,6 @@ func BatchUpdateConfig(c *gin.Context) {
 
 	results := make(map[uint]map[string]interface{})
 	parser := services.NewConfigParser()
-	newContent := parser.Generate(request.Config)
-
 	for _, nodeID := range request.NodeIDs {
 		result := map[string]interface{}{
 			"success": false,
@@ -358,6 +383,23 @@ func BatchUpdateConfig(c *gin.Context) {
 			continue
 		}
 
+		current, readErr := client.ReadFile(node.ConfigPath)
+		if readErr != nil {
+			client.Close()
+			result["error"] = "读取当前配置失败"
+			results[nodeID] = result
+			continue
+		}
+		copy := *request.Config
+		copy.SourceContent = current
+		newContent := parser.Generate(&copy)
+		if losses := services.ConfigLosses(current, newContent); len(losses) > 0 {
+			client.Close()
+			result["error"] = "批量配置会丢失现有指令，已阻止"
+			result["losses"] = losses
+			results[nodeID] = result
+			continue
+		}
 		// 创建备份
 		backupPath, err := client.CreateBackup(node.ConfigPath)
 		if err != nil {
