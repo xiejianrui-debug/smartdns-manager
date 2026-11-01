@@ -1,3 +1,4 @@
+import { sortableColumns, byField, byNumber, compareText, compareDomains } from '../../utils/configSorting';
 import React, { useState, useEffect } from 'react';
 import {
   Table,
@@ -157,13 +158,12 @@ const DomainRuleManager = () => {
     }
   };
 
-  const columns = [
+  const columns = sortableColumns([
     {
       title: '优先级',
       dataIndex: 'priority',
       key: 'priority',
       width: 80,
-      sorter: (a, b) => b.priority - a.priority,
       render: (priority) => (
         <Tag color={priority > 0 ? 'red' : 'default'}>{priority}</Tag>
       ),
@@ -262,7 +262,7 @@ const DomainRuleManager = () => {
         </Space>
       ),
     },
-  ];
+  ], { priority: byNumber('priority'), domain: compareDomains, address: byField('address'), nameserver: (a, b) => compareText(a.nameserver, b.nameserver) || compareDomains(a, b), speed_check_mode: byField('speed_check_mode'), other_options: byField('other_options'), enabled: byNumber('enabled') }, 'nameserver');
 
   return (
     <div>

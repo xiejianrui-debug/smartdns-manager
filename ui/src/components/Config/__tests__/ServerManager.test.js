@@ -33,3 +33,23 @@ test('默认组高级 DoH 能通过真实编辑表单保存，参数和作用域
     groups: [], exclude_default: false, host_ip: '192.0.2.1', tls_host_verify: 'dns.example', node_ids: '[3]',
   })));
 });
+
+test('上游列表默认按分组排列，点击地址表头可按IP排序且不提交配置', async () => {
+  jest.clearAllMocks();
+  getServers.mockResolvedValue({ data: [
+    { id: 1, address: '10.0.0.10', type: 'udp', groups: ['local'] },
+    { id: 2, address: '10.0.0.3', type: 'udp', groups: ['ad'] },
+    { id: 3, address: '10.0.0.2', type: 'udp', groups: ['local'] },
+  ] });
+  getGroups.mockResolvedValue({ data: [] });
+  getNodes.mockResolvedValue({ data: [] });
+  render(<ServerManager />);
+  await screen.findByText('10.0.0.10');
+  const addresses = () => screen.getAllByRole('row').slice(1).map((row) => row.querySelector('code').textContent);
+  expect(addresses()).toEqual(['10.0.0.3', '10.0.0.2', '10.0.0.10']);
+  await userEvent.click(screen.getByRole('columnheader', { name: /服务器地址/ }));
+  expect(addresses()).toEqual(['10.0.0.2', '10.0.0.3', '10.0.0.10']);
+  await userEvent.click(screen.getByRole('columnheader', { name: /服务器地址/ }));
+  expect(addresses()).toEqual(['10.0.0.10', '10.0.0.3', '10.0.0.2']);
+  expect(updateServer).not.toHaveBeenCalled();
+});

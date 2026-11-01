@@ -1,3 +1,4 @@
+import { sortableColumns, byField } from '../../utils/configSorting';
 import React, { useState, useEffect } from 'react';
 import {
   Table,
@@ -83,7 +84,7 @@ const GroupManager = () => {
     }
   };
 
-  const columns = [
+  const columns = sortableColumns([
     {
       title: '分组名称',
       dataIndex: 'name',
@@ -139,7 +140,7 @@ const GroupManager = () => {
         </Space>
       ),
     },
-  ];
+  ], { name: byField('name'), description: byField('description'), created_at: byField('created_at') }, 'name');
 
   return (
     <div>

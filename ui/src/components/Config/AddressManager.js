@@ -1,3 +1,4 @@
+import { sortableColumns, byField, byNumber, compareText } from '../../utils/configSorting';
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -292,7 +293,12 @@ const AddressManager = () => {
     }
   };
 
-  const columns = [
+  const scopeLabel = (row) => {
+    const ids = parseNodeIds(row.node_ids);
+    return ids.length ? ids.map((id) => nodes.find((node) => node.id === id)?.name || `节点 ${id}`).sort(compareText).join('、') : '全部节点';
+  };
+
+  const columns = sortableColumns([
     {
       title: "类型",
       dataIndex: "type",
@@ -429,7 +435,7 @@ const AddressManager = () => {
         </Space>
       ),
     },
-  ];
+  ], { type: byField('type'), domain: byField('domain'), node_ids: (a, b) => compareText(scopeLabel(a), scopeLabel(b)), target: (a, b) => compareText(a.type === 'cname' ? a.cname : a.ip, b.type === 'cname' ? b.cname : b.ip), ip: byField('ip'), enabled: byNumber('enabled'), comment: byField('comment'), created_at: byField('created_at') }, 'domain');
 
   const rowSelection = {
     selectedRowKeys,

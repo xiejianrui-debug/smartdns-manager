@@ -1,3 +1,4 @@
+import { sortableColumns, byField, byNumber, compareServerGroups, compareText } from '../../utils/configSorting';
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -125,7 +126,14 @@ const ServerManager = () => {
   };
 
 
-  const columns = [
+  const scopeLabel = (row) => {
+    try {
+      const ids = nodeScope(row.node_ids);
+      return ids.length ? ids.map((id) => nodes.find((node) => node.id === id)?.name || `节点 ${id}`).sort(compareText).join('、') : '所有节点';
+    } catch { return '作用域无效'; }
+  };
+
+  const columns = sortableColumns([
     {
       title: "服务器地址",
       dataIndex: "address",
@@ -215,7 +223,7 @@ const ServerManager = () => {
         </Space>
       ),
     },
-  ];
+  ], { address: byField('address'), type: byField('type'), groups: compareServerGroups, scope: (a, b) => compareText(scopeLabel(a), scopeLabel(b)), advanced: (a, b) => compareText(a.host_ip, b.host_ip) || compareText(a.tls_host_verify, b.tls_host_verify), exclude_default: byNumber('exclude_default'), created_at: byField('created_at') }, 'groups');
 
   return (
     <div>

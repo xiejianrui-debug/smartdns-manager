@@ -1,3 +1,4 @@
+import { sortableColumns, byField, byNumber, compareServerGroups } from '../../utils/configSorting';
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Input, Modal, Space, Table, Tag, Typography } from 'antd';
 import { SyncOutlined } from '@ant-design/icons';
@@ -5,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { getNodeConfig, getServers, previewNodeSync } from '../../api';
 import { getPendingNodeServers, parseNodeServers } from './nodeServers';
 
-const columns = [
+const columns = sortableColumns([
   {
     title: '上游地址', dataIndex: 'address', key: 'address', width: 300,
     render: (address) => <code style={{ overflowWrap: 'anywhere' }}>{address}</code>,
@@ -32,7 +33,7 @@ const columns = [
       return extra ? <code style={{ overflowWrap: 'anywhere' }}>{extra}</code> : '—';
     },
   },
-];
+], { address: byField('address'), type: byField('type'), groups: compareServerGroups, default: (a, b) => byNumber('exclude_default')(b, a), options: byField('options') }, 'groups');
 
 export default function NodeServerManager({ nodeId, active, onEditConfig }) {
   const [snapshot, setSnapshot] = useState({ applied: [], pending: [], includes: false });

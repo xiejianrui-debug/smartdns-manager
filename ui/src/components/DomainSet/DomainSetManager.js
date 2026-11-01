@@ -1,3 +1,4 @@
+import { sortableColumns, byField, byNumber } from '../../utils/configSorting';
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -237,7 +238,7 @@ const DomainSetManager = () => {
     });
   };
 
-  const columns = [
+  const columns = sortableColumns([
     {
       title: "名称",
       dataIndex: "name",
@@ -342,7 +343,7 @@ const DomainSetManager = () => {
         </Space>
       ),
     },
-  ];
+  ], { name: byField('name'), description: byField('description'), file_path: byField('file_path'), domain_count: byNumber('domain_count'), enabled: byNumber('enabled'), updated_at: byField('updated_at') }, 'name');
 
   return (
     <div>
