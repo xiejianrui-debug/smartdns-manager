@@ -36,3 +36,12 @@ test('仅在参数发生变化时标记同地址条目为待同步', () => {
   expect(getPendingNodeServers([record], applied, 3)).toEqual([]);
   expect(getPendingNodeServers([{ ...record, exclude_default: false }], applied, 3)).toHaveLength(1);
 });
+
+test('旧记录保留节点 bootstrap 及高级参数时不误报待同步，新版记录仍严格比较', () => {
+  const applied = parseNodeServers('server 101.226.4.6 -group cn -group bootstrap -host-ip 101.226.4.6');
+  const record = { address: '101.226.4.6', type: 'udp', groups: ['cn'], options_version: 0 };
+  expect(getPendingNodeServers([record], applied, 5)).toEqual([]);
+  expect(getPendingNodeServers([{ ...record, groups: ['local'] }], applied, 5)).toHaveLength(1);
+  expect(getPendingNodeServers([{ ...record, options_version: 1 }], applied, 5)).toHaveLength(1);
+  expect(getPendingNodeServers([{ ...record, host_ip: '1.1.1.1' }], applied, 5)).toHaveLength(1);
+});

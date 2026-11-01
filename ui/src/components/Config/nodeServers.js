@@ -27,6 +27,20 @@ function signature(server) {
   return JSON.stringify([server.type || 'udp', server.address, normalized]);
 }
 
+// 旧记录同步会保留节点的额外分组及未登记的高级参数，与后端合并规则一致。
+function matchesLegacy(record, applied) {
+  if (record.address !== applied.address || (record.type || 'udp') !== applied.type) return false;
+  if (!(record.groups || []).every((group) => applied.groups.includes(group))) return false;
+  const options = applied.options;
+  return [
+    ['-host-ip', record.host_ip],
+    ['-tls-host-verify', record.tls_host_verify],
+  ].every(([flag, value]) => !value || options.split(/\s+/).some((part, index, parts) =>
+    part === flag && parts[index + 1] === value)) &&
+    (!record.extra_options || signature({ ...record, options: record.extra_options }) ===
+      signature({ ...record, options: options.replace(/(?:^|\s)-(?:group|host-ip|tls-host-verify)\s+\S+|(?:^|\s)-exclude-default-group/g, '').trim() }));
+}
+
 export function getPendingNodeServers(servers, applied, nodeId) {
   const current = new Set(applied.map(signature));
   return servers.filter((server) => {
@@ -40,6 +54,7 @@ export function getPendingNodeServers(servers, applied, nodeId) {
     }
     if (!Array.isArray(ids)) return false;
     const assigned = ids.length === 0 || ids.some((id) => String(id) === String(nodeId));
-    return assigned && !current.has(signature(server));
+    return assigned && !current.has(signature(server)) &&
+      !(server.options_version === 0 && applied.some((entry) => matchesLegacy(server, entry)));
   });
 }
