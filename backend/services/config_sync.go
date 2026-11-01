@@ -7,10 +7,39 @@ import (
 	"log"
 	"smartdns-manager/database"
 	"smartdns-manager/models"
+	"sort"
+	"strings"
 )
 
 type ConfigSyncService struct {
 	notificationService *NotificationService
+}
+
+// 新上游紧跟具有相同分组集合的最后一条，避免混入其他用途的上游之后。
+func insertServerByGroup(servers []models.DNSServer, server models.DNSServer) []models.DNSServer {
+	if server.GroupsStr != "" {
+		_ = json.Unmarshal([]byte(server.GroupsStr), &server.Groups)
+	}
+	HydrateServerOptions(&server)
+	groupKey := func(s models.DNSServer) string {
+		if s.GroupsStr != "" {
+			_ = json.Unmarshal([]byte(s.GroupsStr), &s.Groups)
+		}
+		HydrateServerOptions(&s)
+		groups := append([]string{}, s.Groups...)
+		sort.Strings(groups)
+		return strings.Join(groups, "\x00")
+	}
+	key, at := groupKey(server), len(servers)
+	for i, existing := range servers {
+		if groupKey(existing) == key {
+			at = i + 1
+		}
+	}
+	result := make([]models.DNSServer, 0, len(servers)+1)
+	result = append(result, servers[:at]...)
+	result = append(result, server)
+	return append(result, servers[at:]...)
 }
 
 func NewConfigSyncService() *ConfigSyncService {
@@ -244,7 +273,7 @@ func (s *ConfigSyncService) syncServerToNode(server *models.DNSServer, node *mod
 	}
 
 	if !serverExists {
-		config.Servers = append(config.Servers, *server)
+		config.Servers = insertServerByGroup(config.Servers, *server)
 	}
 
 	newConfig := parser.Generate(config)
@@ -407,7 +436,7 @@ func (s *ConfigSyncService) mergeConfigs(existingConfig *models.SmartDNSConfig, 
 		}
 		// 如果不存在，添加新的
 		if !found {
-			existingConfig.Servers = append(existingConfig.Servers, dbServer)
+			existingConfig.Servers = insertServerByGroup(existingConfig.Servers, dbServer)
 		}
 	}
 
