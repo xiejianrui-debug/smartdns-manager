@@ -154,7 +154,7 @@ const ServerManager = () => {
               {group}
             </Tag>
           ))}
-          {(!groups || groups.length === 0) && "-"}
+          {(!groups || groups.length === 0) && "默认组"}
         </>
       ),
     },
@@ -286,7 +286,6 @@ const ServerManager = () => {
             name="groups"
             label="服务器分组"
             extra="留空时仅参与默认组；也可以选择或输入自定义分组"
-            rules={[{ required: true, message: "请选择服务器分组" }]}
           >
             <Select
               mode="tags"
