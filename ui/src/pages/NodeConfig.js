@@ -28,7 +28,7 @@ import {
   getNodes,
 } from '../api';
 import NodeServerManager from '../components/Config/NodeServerManager';
-import AddressManager from '../components/Config/AddressManager';
+import NodeAddressManager from '../components/Config/NodeAddressManager';
 
 const NodeConfig = () => {
   const { id } = useParams();
@@ -197,15 +197,7 @@ const NodeConfig = () => {
   );
 
   const addressesTab = (
-    <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Alert
-        message="地址映射管理"
-        description="管理此节点的域名到IP地址的映射规则。"
-        type="info"
-        showIcon
-      />
-      <AddressManager />
-    </Space>
+    <NodeAddressManager key={id} nodeId={id} active={activeTab === 'addresses'} />
   );
 
   const backupsTab = (
